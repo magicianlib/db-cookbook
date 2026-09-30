@@ -1,38 +1,43 @@
 -- create database messaging_db;
 
+-- PostgreSQL 18+ 内置 uuidv7
+-- select uuidv7();
+
 --
 -- 消息发件箱
 --
 drop table if exists public.outbox;
 create table public.outbox
 (
-    message_id     bigint                                     not null
+    message_id    bigint                                     not null
+    -- PostgreSQL 18+ 推荐直接使用 uuid，内置了高性能的 uuidv7() 函数
+    -- message_id    uuid                  default uuidv7()  not null
         constraint outbox_pk
             primary key,
-    aggregate_type text                                       not null,
-    aggregate_id   text                                       not null,
-    event_type     text                                       not null,
-    payload        jsonb                                      not null,
-    status         text                     default 'PENDING' not null,
-    created_at     timestamp with time zone default now()     not null,
-    updated_at     timestamp with time zone default now()     not null,
-    sent_at        timestamp with time zone,
-    retry_count    integer                  default 0         not null,
-    last_error     text,
-    next_retry_at  timestamp with time zone,
-    version        integer                  default 0         not null,
-    remark         text
+    topic         text                                       not null,
+    event_type    text                                       not null,
+    routing_key   text                                       not null,
+    payload       jsonb                                      not null,
+    status        text                     default 'PENDING' not null,
+    created_at    timestamp with time zone default now()     not null,
+    updated_at    timestamp with time zone default now()     not null,
+    sent_at       timestamp with time zone,
+    retry_count   integer                  default 0         not null,
+    last_error    text,
+    next_retry_at timestamp with time zone,
+    version       integer                  default 0         not null,
+    remark        text
 );
 
 comment on table public.outbox is '消息发件箱';
 
 comment on column public.outbox.message_id is '消息ID,应保证全局唯一便于下游消息去重';
 
-comment on column public.outbox.aggregate_type is 'topic';
-
-comment on column public.outbox.aggregate_id is '消息路由key';
+comment on column public.outbox.topic is 'topic';
 
 comment on column public.outbox.event_type is 'topic具体业务类型';
+
+comment on column public.outbox.routing_key is '消息路由key';
 
 comment on column public.outbox.payload is '消息体';
 
@@ -61,21 +66,23 @@ comment on column public.outbox.remark is '备注说明';
 drop table if exists public.inbox;
 create table public.inbox
 (
-    id             bigint generated always as identity
+    id            bigint generated always as identity
         constraint inbox_pk
             primary key,
-    message_id     bigint                                     not null,
-    aggregate_type text                                       not null,
-    aggregate_id   text                                       not null,
-    event_type     text                                       not null,
-    payload        jsonb                                      not null,
-    status         text                     default 'PENDING' not null,
-    received_at    timestamp with time zone default now()     not null,
-    processed_at   timestamp with time zone,
-    retry_count    integer                  default 0         not null,
-    last_error     text,
-    next_retry_at  timestamp with time zone,
-    remark         text
+    message_id    bigint                                     not null,
+    -- PostgreSQL 18+ 推荐直接使用 uuid
+    -- message_id    uuid                                    not null,
+    topic         text                                       not null,
+    event_type    text                                       not null,
+    routing_key   text                                       not null,
+    payload       jsonb                                      not null,
+    status        text                     default 'PENDING' not null,
+    received_at   timestamp with time zone default now()     not null,
+    processed_at  timestamp with time zone,
+    retry_count   integer                  default 0         not null,
+    last_error    text,
+    next_retry_at timestamp with time zone,
+    remark        text
 );
 
 comment on table public.inbox is '消息收件箱';
@@ -84,11 +91,11 @@ comment on column public.inbox.id is '主键ID';
 
 comment on column public.inbox.message_id is '消息ID';
 
-comment on column public.outbox.aggregate_type is 'topic';
-
-comment on column public.outbox.aggregate_id is '消息路由key';
+comment on column public.outbox.topic is 'topic';
 
 comment on column public.outbox.event_type is 'topic具体业务类型';
+
+comment on column public.outbox.routing_key is '消息路由key';
 
 comment on column public.inbox.payload is '消息内容';
 
