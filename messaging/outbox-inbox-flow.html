@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outbox + Inbox 可靠投递链路</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;   /* white-smoke */
+      --color-ink:     #2d3142;   /* jet-black */
+      --color-muted:   #4f5d75;   /* blue-slate */
+      --color-soft:    #7a8399;   /* slate-grey */
+      --color-accent:  #eb6c36;   /* atomic-tangerine */
+      --color-link:    #2e5aa8;   /* link-blue */
+      --font-sans:     'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Outbox / Inbox · Reliable Messaging</p>
+    <h1>Outbox + Inbox：可靠投递与幂等消费</h1>
+
+    <svg viewBox="0 0 1240 464" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="outbox-flow-title outbox-flow-desc">
+      <title id="outbox-flow-title">Outbox + Inbox 可靠投递链路</title>
+      <desc id="outbox-flow-desc">生产方在本地事务中同时写业务表与发件箱，投递器轮询发件箱并发布到消息队列，消费者以至少一次语义收到消息，向收件箱去重插入并确认，再在同一本地事务中完成业务处理。</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- Zones: drawn first, behind everything -->
+      <rect x="40" y="64" width="384" height="296" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="816" y="64" width="384" height="296" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="196" y="56" width="72" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="232" y="68" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">生产方服务</text>
+      <rect x="972" y="56" width="72" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="1008" y="68" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">消费方服务</text>
+
+      <!-- Local-transaction boundaries: dashed frames inside zones -->
+      <rect x="64" y="104" width="352" height="112" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <rect x="208" y="96" width="64" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="240" y="108" fill="#7a8399" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">本地事务</text>
+      <rect x="832" y="104" width="352" height="112" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <rect x="976" y="96" width="64" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="1008" y="108" fill="#7a8399" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">本地事务</text>
+
+      <!-- Arrows: before nodes -->
+      <path d="M 228,160 H 252" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 324,192 V 276" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 396,304 H 484" fill="none" stroke="#2e5aa8" stroke-width="1" marker-end="url(#arrow-link)"/>
+      <path d="M 636,290 H 844" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 844,318 H 636" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <path d="M 916,276 V 192" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 988,160 H 1016" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Arrow labels: masks keep 6-10px clear of strokes -->
+      <rect x="334" y="226" width="64" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="366" y="238" fill="#7a8399" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">轮询待发</text>
+      <rect x="418" y="280" width="44" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="440" y="292" fill="#7a8399" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">发布</text>
+      <rect x="676" y="266" width="128" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="740" y="278" fill="#eb6c36" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">至少一次 · 可能重复</text>
+      <rect x="716" y="324" width="48" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="740" y="333" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ACK</text>
+      <rect x="926" y="226" width="64" height="16" rx="2" fill="#f5f5f5"/>
+      <text x="958" y="238" fill="#7a8399" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">去重插入</text>
+
+      <!-- Nodes -->
+      <!-- Producer business table -->
+      <rect x="84" y="128" width="144" height="64" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="92" y="134" width="32" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
+      <text x="108" y="143" fill="rgba(79,93,117,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TABLE</text>
+      <text x="156" y="164" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">业务表</text>
+      <text x="156" y="178" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">domain tables</text>
+
+      <!-- Outbox table -->
+      <rect x="252" y="128" width="144" height="64" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="260" y="134" width="32" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
+      <text x="276" y="143" fill="rgba(79,93,117,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TABLE</text>
+      <text x="324" y="164" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">Outbox 发件箱</text>
+      <text x="324" y="178" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">PENDING &gt; SENT</text>
+
+      <!-- Relay / dispatcher process -->
+      <rect x="252" y="276" width="144" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="260" y="282" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="274" y="291" fill="rgba(45,49,66,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROC</text>
+      <text x="324" y="308" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">投递器</text>
+      <text x="324" y="322" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">poll / cdc</text>
+
+      <!-- Message broker -->
+      <rect x="484" y="276" width="152" height="56" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <rect x="492" y="282" width="36" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="510" y="291" fill="rgba(45,49,66,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">QUEUE</text>
+      <text x="560" y="308" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">消息队列</text>
+      <text x="560" y="322" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">persist · replica · ack</text>
+
+      <!-- Consumer process -->
+      <rect x="844" y="276" width="144" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="852" y="282" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="866" y="291" fill="rgba(45,49,66,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROC</text>
+      <text x="916" y="308" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">消费者</text>
+      <text x="916" y="322" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">listener · ack</text>
+
+      <!-- Inbox table (focal) -->
+      <rect x="844" y="128" width="144" height="64" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+      <rect x="852" y="134" width="32" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.40)" stroke-width="0.8"/>
+      <text x="868" y="143" fill="rgba(235,108,54,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TABLE</text>
+      <text x="916" y="164" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">Inbox 收件箱</text>
+      <text x="916" y="178" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">(event_type, message_id)</text>
+
+      <!-- Consumer business table -->
+      <rect x="1016" y="128" width="144" height="64" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="1024" y="134" width="32" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
+      <text x="1040" y="143" fill="rgba(79,93,117,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TABLE</text>
+      <text x="1088" y="164" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif" text-anchor="middle">业务表</text>
+      <text x="1088" y="178" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">domain tables</text>
+
+      <!-- Legend: horizontal strip below the diagram -->
+      <line x1="40" y1="404" x2="1200" y2="404" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="40" y="430" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <line x1="124" y1="426" x2="156" y2="426" stroke="#4f5d75" stroke-width="1"/>
+      <text x="164" y="430" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif">内部流转</text>
+      <line x1="260" y1="426" x2="292" y2="426" stroke="#2e5aa8" stroke-width="1"/>
+      <text x="300" y="430" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif">发布到 MQ</text>
+      <line x1="416" y1="426" x2="448" y2="426" stroke="#eb6c36" stroke-width="1.2"/>
+      <text x="456" y="430" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif">至少一次投递</text>
+      <line x1="576" y1="426" x2="608" y2="426" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="616" y="430" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif">ACK 确认</text>
+      <rect x="720" y="418" width="32" height="14" rx="3" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <text x="760" y="430" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist', 'Noto Sans SC', 'PingFang SC', sans-serif">本地事务边界</text>
+    </svg>
+  </div>
+</body>
+</html>
