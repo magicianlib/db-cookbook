@@ -85,6 +85,8 @@ create table public.fund_transaction
     account_no     text                         not null,
     biz_type       text                         not null,
     biz_no         text                         not null,
+    ref_biz_type   text,
+    ref_biz_no     text,
     balance_type   text                         not null,
     direction      text                         not null,
     balance_before numeric(20, 6)               not null,
@@ -111,6 +113,10 @@ comment on column public.fund_transaction.account_no is '账户编号';
 comment on column public.fund_transaction.biz_type is '业务类型';
 
 comment on column public.fund_transaction.biz_no is '业务单号';
+
+comment on column public.fund_transaction.ref_biz_type is '关联业务类型（如退款关联的原支付=PAY）';
+
+comment on column public.fund_transaction.ref_biz_no is '关联业务单号（如退款关联的原支付订单号）';
 
 comment on column public.fund_transaction.balance_type is '余额类型(AVAILABLE:可用余额, FROZEN:冻结余额, PENDING:在途余额';
 
