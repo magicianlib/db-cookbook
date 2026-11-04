@@ -13,34 +13,34 @@ create table public.fund_account
     account_no        text                            not null,
     account_status    text                            not null,
     account_type      text                            not null,
-    owner_id          text                            not null,
     owner_type        text                            not null,
+    owner_id          text                            not null,
     currency          text                            not null,
     total_balance     numeric(20, 6) default 0        not null,
     available_balance numeric(20, 6) default 0        not null,
     frozen_balance    numeric(20, 6) default 0        not null,
     pending_amount    numeric(20, 6) default 0        not null,
     version           bigint         default 0        not null,
-    remark            text,
-    opened_at         timestamptz                     not null,
     last_settled_at   timestamptz,
+    opened_at         timestamptz                     not null,
     created_at        timestamptz    default now()    not null,
-    updated_at        timestamptz                     not null
+    updated_at        timestamptz                     not null,
+    remark            text
 );
 
 comment on table public.fund_account is '资金账户表';
 
 comment on column public.fund_account.account_id is '账户ID';
 
-comment on column public.fund_account.account_no is '账户业务编号(对外展示)';
+comment on column public.fund_account.account_no is '账户编号(对外展示)';
 
 comment on column public.fund_account.account_status is '账户状态';
 
 comment on column public.fund_account.account_type is '账户类型(CASH:现金/可用余额账户, DEPOSIT:保证金/押金账户, SETTLEMENT:待结算/结算账户, FEE:手续费账户)';
 
-comment on column public.fund_account.owner_id is '账户主体ID(用户/商户/渠道)';
+comment on column public.fund_account.owner_type is '账户主体类型(USER:用户, MERCHANT:商户, CHANNEL:渠道, PLATFORM:平台)';
 
-comment on column public.fund_account.owner_type is '主体类型(USER:用户, MERCHANT:商户, CHANNEL:渠道, PLATFORM:平台)';
+comment on column public.fund_account.owner_id is '账户主体ID(用户/商户/渠道)';
 
 comment on column public.fund_account.currency is '账户币种(ISO 4217)';
 
@@ -54,21 +54,21 @@ comment on column public.fund_account.pending_amount is '在途金额(结算中�
 
 comment on column public.fund_account.version is '乐观锁版本号';
 
-comment on column public.fund_account.remark is '备注';
+comment on column public.fund_account.last_settled_at is '最近结算时间';
 
 comment on column public.fund_account.opened_at is '开户时间';
-
-comment on column public.fund_account.last_settled_at is '最近结算时间';
 
 comment on column public.fund_account.created_at is '创建时间';
 
 comment on column public.fund_account.updated_at is '更新时间';
 
+comment on column public.fund_account.remark is '备注';
+
 create unique index fund_account_account_no_uindex
     on public.fund_account (account_no);
 
-create unique index fund_account_owner_id_currency_uindex
-    on public.fund_account (owner_id, currency);
+create unique index fund_account_owner_id_account_type_currency_uindex
+    on public.fund_account (owner_id, account_type, currency);
 
 
 --
@@ -108,23 +108,23 @@ comment on column public.fund_transaction.transaction_no is '流水业务编号(
 
 comment on column public.fund_transaction.account_id is '账户ID';
 
-comment on column public.fund_transaction.account_no is '账户编号';
+comment on column public.fund_transaction.account_no is '账户编号(对外展示)';
 
 comment on column public.fund_transaction.biz_type is '业务类型';
 
 comment on column public.fund_transaction.biz_no is '业务单号';
 
-comment on column public.fund_transaction.ref_biz_type is '关联业务类型（如退款关联的原支付=PAY）';
+comment on column public.fund_transaction.ref_biz_type is '关联业务类型(如退款关联的原支付=PAY)';
 
-comment on column public.fund_transaction.ref_biz_no is '关联业务单号（如退款关联的原支付订单号）';
+comment on column public.fund_transaction.ref_biz_no is '关联业务单号(如退款关联的原支付订单号)';
 
 comment on column public.fund_transaction.balance_type is '余额类型(AVAILABLE:可用余额, FROZEN:冻结余额, PENDING:在途余额';
 
-comment on column public.fund_transaction.direction is '收支方向：IN/OUT';
+comment on column public.fund_transaction.direction is '收支方向:IN/OUT';
 
 comment on column public.fund_transaction.balance_before is '交易前余额';
 
-comment on column public.fund_transaction.amount is '发生金额';
+comment on column public.fund_transaction.amount is '交易金额';
 
 comment on column public.fund_transaction.balance_after is '交易后余额';
 
@@ -140,14 +140,20 @@ comment on column public.fund_transaction.created_at is '创建时间';
 
 comment on column public.fund_transaction.updated_at is '更新时间';
 
-create index fund_transaction_account_id__index
-    on public.fund_transaction (account_id, created_at);
-
-create index fund_transaction_biz_no_index
-    on public.fund_transaction (biz_no);
+create unique index fund_transaction_transaction_no_uindex
+    on public.fund_transaction (transaction_no);
 
 create unique index fund_transaction_biz_type_biz_no_account_id_uindex
     on public.fund_transaction (biz_type, biz_no, account_id);
 
-create unique index fund_transaction_transaction_no_uindex
-    on public.fund_transaction (transaction_no);
+create index fund_transaction_account_id__index
+    on public.fund_transaction (account_id, created_at);
+
+create index fund_transaction_created_at_index
+    on public.fund_transaction (created_at);
+
+create index fund_transaction_biz_no_index
+    on public.fund_transaction (biz_no);
+
+create index fund_transaction_ref_biz_no_index
+    on public.fund_transaction (ref_biz_no);
