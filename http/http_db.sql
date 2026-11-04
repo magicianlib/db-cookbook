@@ -20,7 +20,7 @@ create table public.http_request_logs
     response_headers  text,
     response_body     text,
     biz_response_code text,
-    is_success        integer,
+    is_success        boolean,
     error_message     text,
     cost_time         integer,
     created_at        timestamptz not null,
@@ -53,7 +53,7 @@ comment on column public.http_request_logs.response_body is '响应报文';
 
 comment on column public.http_request_logs.biz_response_code is '业务响应码(如10001)';
 
-comment on column public.http_request_logs.is_success is '是否成功(0否,1是)';
+comment on column public.http_request_logs.is_success is '是否成功';
 
 comment on column public.http_request_logs.error_message is '异常/报错信息(用于快速定位崩溃或报错)';
 
@@ -63,11 +63,11 @@ comment on column public.http_request_logs.created_at is '创建时间';
 
 comment on column public.http_request_logs.remark is '备注';
 
-create index http_request_logs__index
-    on public.http_request_logs (created_at, user_id);
-
 create index http_request_logs_biz_no_biz_type_index
     on public.http_request_logs (biz_no, biz_type);
 
 create index http_request_logs_user_id_biz_type_index
     on public.http_request_logs (user_id, biz_type);
+
+create index http_request_logs_created_at_index
+    on public.http_request_logs (created_at);
