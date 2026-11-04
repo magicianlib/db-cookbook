@@ -1,43 +1,38 @@
 -- create database messaging_db;
 
--- PostgreSQL 18+ 内置 uuidv7
--- select uuidv7();
-
 --
 -- 消息发件箱
 --
 drop table if exists public.outbox;
 create table public.outbox
 (
-    message_id    bigint                                     not null
-    -- PostgreSQL 18+ 推荐直接使用 uuid，内置了高性能的 uuidv7() 函数
-    -- message_id    uuid                  default uuidv7()  not null
+    message_id     uuid                     default uuidv7()  not null
         constraint outbox_pk
             primary key,
-    topic         text                                       not null,
-    event_type    text                                       not null,
-    routing_key   text                                       not null,
-    payload       jsonb                                      not null,
-    status        text                     default 'PENDING' not null,
-    created_at    timestamp with time zone default now()     not null,
-    updated_at    timestamp with time zone default now()     not null,
-    sent_at       timestamp with time zone,
-    retry_count   integer                  default 0         not null,
-    last_error    text,
-    next_retry_at timestamp with time zone,
-    version       integer                  default 0         not null,
-    remark        text
+    aggregate_type text                                       not null,
+    aggregate_id   text                                       not null,
+    event_type     text                                       not null,
+    payload        jsonb                                      not null,
+    status         text                     default 'PENDING' not null,
+    created_at     timestamp with time zone default now()     not null,
+    updated_at     timestamp with time zone default now()     not null,
+    sent_at        timestamp with time zone,
+    retry_count    integer                  default 0         not null,
+    last_error     text,
+    next_retry_at  timestamp with time zone,
+    version        integer                  default 0         not null,
+    remark         text
 );
 
 comment on table public.outbox is '消息发件箱';
 
 comment on column public.outbox.message_id is '消息ID,应保证全局唯一便于下游消息去重';
 
-comment on column public.outbox.topic is 'topic';
+comment on column public.outbox.aggregate_type is '聚合类型(topic)';
+
+comment on column public.outbox.aggregate_id is '聚合ID(消息路由key)';
 
 comment on column public.outbox.event_type is 'topic具体业务类型';
-
-comment on column public.outbox.routing_key is '消息路由key';
 
 comment on column public.outbox.payload is '消息体';
 
@@ -66,23 +61,21 @@ comment on column public.outbox.remark is '备注说明';
 drop table if exists public.inbox;
 create table public.inbox
 (
-    id            bigint generated always as identity
+    id             bigint generated always as identity
         constraint inbox_pk
             primary key,
-    message_id    bigint                                     not null,
-    -- PostgreSQL 18+ 推荐直接使用 uuid
-    -- message_id    uuid                                    not null,
-    topic         text                                       not null,
-    event_type    text                                       not null,
-    routing_key   text                                       not null,
-    payload       jsonb                                      not null,
-    status        text                     default 'PENDING' not null,
-    received_at   timestamp with time zone default now()     not null,
-    processed_at  timestamp with time zone,
-    retry_count   integer                  default 0         not null,
-    last_error    text,
-    next_retry_at timestamp with time zone,
-    remark        text
+    message_id     uuid                                       not null,
+    aggregate_type text                                       not null,
+    aggregate_id   text                                       not null,
+    event_type     text                                       not null,
+    payload        jsonb                                      not null,
+    status         text                     default 'PENDING' not null,
+    received_at    timestamp with time zone default now()     not null,
+    processed_at   timestamp with time zone,
+    retry_count    integer                  default 0         not null,
+    last_error     text,
+    next_retry_at  timestamp with time zone,
+    remark         text
 );
 
 comment on table public.inbox is '消息收件箱';
@@ -91,11 +84,11 @@ comment on column public.inbox.id is '主键ID';
 
 comment on column public.inbox.message_id is '消息ID';
 
-comment on column public.outbox.topic is 'topic';
+comment on column public.outbox.aggregate_type is '聚合类型(topic)';
+
+comment on column public.outbox.aggregate_id is '聚合ID(消息路由key)';
 
 comment on column public.outbox.event_type is 'topic具体业务类型';
-
-comment on column public.outbox.routing_key is '消息路由key';
 
 comment on column public.inbox.payload is '消息内容';
 
@@ -115,3 +108,45 @@ comment on column public.inbox.remark is '备注说明';
 
 create unique index inbox_message_id_uindex
     on public.inbox (message_id);
+
+
+---
+
+BEGIN;
+
+-- 单独创建一个用于 CDC 的登录账号
+-- 账号必须具备逻辑复制权限(REPLICATION)
+-- CREATE ROLE 账号 WITH REPLICATION LOGIN PASSWORD '密码';
+--
+-- 演示账号/密码: debezium/debezium@123
+CREATE ROLE debezium WITH REPLICATION LOGIN PASSWORD 'debezium@123';
+
+-- 允许连接到目标数据库(以 order_db 为例)
+GRANT CONNECT ON DATABASE order_db TO debezium;
+
+-- 后续SQL需要进入到目标库后执行
+
+-- 授予 schema 使用权限与现有表读取权限（public 仅为示例，替换为实际 schema）
+GRANT USAGE ON SCHEMA public TO debezium;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO debezium;
+
+-- （可选）后续新建表自动获得读取权限
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO debezium;
+
+COMMIT;
+
+---
+
+SELECT * FROM pg_publication;
+
+CREATE PUBLICATION order_db_outbox FOR ALL TABLES;
+
+SHOW wal_level;
+
+SELECT * FROM pg_replication_slots;
+
+select pg_drop_replication_slot('order_db_public_outbox');
+
+INSERT INTO public.outbox (aggregate_type, aggregate_id, event_type, payload) VALUES ( 'orders', '9191642889', 'paid', '{"orderId":9191642889,"payableAmount":199.00}');
+
+create publication order_db_cdc for all tables;
