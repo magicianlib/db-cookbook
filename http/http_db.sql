@@ -6,7 +6,7 @@
 drop table if exists public.http_request_logs;
 create table public.http_request_logs
 (
-    id                uuid        not null
+    id                uuid         default uuidv7() not null
         constraint http_request_logs_pk
             primary key,
     user_id           text,
